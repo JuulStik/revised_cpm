@@ -1,0 +1,205 @@
+<!-- Page setup and title -->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta
+      http-equiv="Content-Type"
+      content="text/html;
+charset=UTF-8"
+    />
+    <title>PageTitle</title>
+    <style type="text/css">
+      body {
+        font-family: "HelveticaNeue-Light", sans-serif;
+        padding: 15px;
+      }
+    </style>
+
+    <!-- Sourcing the cpm build -->
+    <script src="./artistoo-master/build/artistoo.js"></script>
+    <script>
+      "use strict";
+
+      /*	----------------------------------
+      	CONFIGURATION SETTINGS
+      	----------------------------------
+      */
+      let config = {
+        // Grid settings
+        ndim: 2,
+        field_size: [200, 200],
+        seed: 1,
+
+        // CPM parameters and configuration
+        conf: {
+          // Basic CPM parameters
+          torus: [true, true], // Should the grid have linked borders?
+          // seed: 1, // Seed for random number generation.
+          T: 20, // CPM temperature
+
+          // Constraint parameters.
+          // Mostly these have the format of an array in which each element specifies the
+          // parameter value for one of the cellkinds on the grid.
+          // First value is always cellkind 0 (the background) and is often not used.
+
+          // Adhesion parameters:
+          J: [
+            [0, 20, 80],
+            [20, 0, 0],
+            [80, 0, 0],
+          ],
+
+          // VolumeConstraint parameters
+          LAMBDA_V: [0, 50, 100], // VolumeConstraint importance per cellkind
+          V: [0, 200, 70], // Target volume of each cellkind
+
+          // PerimeterConstraint parameters
+          LAMBDA_P: [0, 2, 100], // PerimeterConstraint importance per cellkind
+          P: [0, 180, 60], // Target perimeter of each cellkind
+
+          // ActivityConstraint parameters
+          LAMBDA_ACT: [0, 200, 0], // ActivityConstraint importance per cellkind
+          MAX_ACT: [0, 80, 0], // Activity memory duration per cellkind
+          ACT_MEAN: "geometric", // Is neighborhood activity computed as a
+          // "geometric" or "arithmetic" mean?
+        },
+
+        // Simulation setup and configuration
+        simsettings: {
+          // Cells on the grid
+          NRCELLS: [80, 15], // Number of cells to seed for all
+          // non-background cellkinds.
+          // Runtime etc
+          BURNIN: 75,
+          RUNTIME: 750,
+          RUNTIME_BROWSER: 750,
+
+          // Visualization
+          CANVASCOLOR: "eaecef",
+          CELLCOLOR: ["000000", "0000CD"],
+          ACTCOLOR: [true, true], // Should pixel activity values be displayed?
+          SHOWBORDERS: [false, true], // Should cellborders be displayed?
+          zoom: 2, // zoom in on canvas with this factor.
+
+          // Output stats etc
+          STATSOUT: { browser: false, node: true }, // Should stats be computed?
+          LOGRATE: 100, // Output stats every <LOGRATE> MCS.
+        },
+      };
+
+      function middlepoint(array) {
+        let sum = [0, 0];
+        for (let i = 0; i < array.length; i++) {
+          sum[0] += array[i][0];
+          sum[1] += array[i][1];
+        }
+        sum[0] = sum[0] / array.length;
+        sum[1] = sum[1] / array.length;
+        return sum;
+      }
+
+      /*	---------------------------------- */
+      let sim, meter;
+      let nrObstacles = 0;
+      let midpoints = [];
+
+      function initialize() {
+        let custommethods = {
+          initializeGrid: initializeGrid,
+        };
+        sim = new CPM.Simulation(config, custommethods);
+
+        step();
+      }
+
+      function step() {
+        sim.step();
+        if (
+          (sim.conf["RUNTIME_BROWSER"] == "Inf") |
+          (sim.time + 1 < sim.conf["RUNTIME_BROWSER"])
+        ) {
+          requestAnimationFrame(step);
+          let midpoints_step = [];
+          for (
+            var i = nrObstacles + 1;
+            i <= sim.conf["NRCELLS"][0] + nrObstacles;
+            i++
+          ) {
+            midpoints_step.push(
+              middlepoint(
+                sim.C.stats.PixelsByCell.M.stat_values.PixelsByCell[i]
+              )
+            );
+          }
+          midpoints.push(midpoints_step);
+          // console.log(`step: ${sim.time}`);
+          // console.log(midpoints_step);
+        }
+      }
+
+      /* The following custom methods will be added to the simulation object*/
+      function initializeGrid() {
+        // add the initializer if not already there
+        if (!this.helpClasses["gm"]) {
+          this.addGridManipulator();
+        }
+
+        // Seed epidermal cell layer
+        // this.C.meter()
+        let step = 75; //30 and 75
+        // let NrObst = 200/step * 200/step;
+        for (var i = 1; i < this.C.extents[0]; i += step) {
+          for (var j = 1; j < this.C.extents[1]; j += step) {
+            // nrObstacles++;
+            // this.gm.seedCellAt(2, [i, j]);
+          }
+        }
+        let nrcells = this.conf["NRCELLS"][0];
+
+        // Seed the right number of cells for each cellkind
+        for (var i = 0; i < nrcells; i++) {
+          this.gm.seedCell(1);
+          // first cell always at the midpoint. Any other cells
+          // randomly.
+          // if (i == 0) {
+          //   this.gm.seedCellAt(1, this.C.midpoint);
+          // } else {
+          //   this.gm.seedCell(1);
+          // }
+        }
+      }
+
+      // console.log(midpoints);
+      let fileName = "midpoint_data";
+
+      // Function to download data to a file
+      function download(data, filename, type) {
+        var file = new Blob([data], { type: type });
+        if (window.navigator.msSaveOrOpenBlob)
+          // IE10+
+          window.navigator.msSaveOrOpenBlob(file, filename);
+        else {
+          // Others
+          var a = document.createElement("a"),
+            url = URL.createObjectURL(file);
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function () {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }, 0);
+        }
+      }
+    </script>
+  </head>
+  <body onload="initialize()">
+    <h1>Your Page Title</h1>
+    <p>Description of your page.</p>
+  </body>
+  <a href="" id="a">click here to download your file</a>
+  <button onclick="download(midpoints, 'myfilename.txt', 'text/csv')">
+    Create file
+  </button>
+</html>
